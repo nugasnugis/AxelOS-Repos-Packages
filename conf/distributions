@@ -1,0 +1,7 @@
+Origin: repos
+Label: repo
+Codename: zena
+Architectures: amd64 arm64 i386
+Components: main
+Description: My personal Debian package repository hosted on GitHub Pages
+SignWith: nugiefp@gmail.com
