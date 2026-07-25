@@ -1,9 +1,13 @@
 name: Deploy Cross-Component APT Repo
 
+# Triggers the runner instantly whenever a .deb file is pushed to main
 on:
   push:
     branches:
       - main
+    paths:
+      - '**/*.deb'
+      - '.github/workflows/deploy.yml'
 
 permissions:
   contents: write
@@ -14,7 +18,7 @@ jobs:
   build-matrix:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false # Prevents one empty folder from killing other working runs
+      fail-fast: false
       matrix:
         codename: ["zena", "suki"]
         component: ["main", "testing"]
@@ -22,17 +26,17 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # --- CONDITIONAL FOLDER CHECK ---
-      # This determines if there are actually files to process for this track
-      - name: Check if channel directory exists
+      # Auto-detects if a file exists in the active matrix channel path
+      - name: Check if channel directory contains deb files
         id: check-dir
         run: |
           TARGET_PATH="${{ github.workspace }}/${{ matrix.codename }}/${{ matrix.component }}"
-          if [ -d "$TARGET_PATH" ] && [ "$(ls -A "$TARGET_PATH")" ]; then
+          if [ -d "$TARGET_PATH" ] && ls "$TARGET_PATH"/*.deb 1> /dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Found packages to process in $TARGET_PATH"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Directory $TARGET_PATH is empty or missing. Skipping build step."
+            echo "No packages found in $TARGET_PATH. Skipping."
           fi
 
       - name: Setup APT Repository via Reprepro
@@ -40,7 +44,7 @@ jobs:
         id: create-apt-repo
         uses: morph027/apt-repo-action@v3
         with:
-          repo-name: "myarepo"
+          repo-name: "myrepo"
           signing-key: ${{ secrets.GPG_PRIVATE_KEY }}
           signing-key-passphrase: ${{ secrets.GPG_PASSPHRASE }}
           codename: ${{ matrix.codename }}
@@ -48,7 +52,6 @@ jobs:
           architectures: "amd64,arm64"
           scan-dir: "${{ github.workspace }}/${{ matrix.codename }}/${{ matrix.component }}"
 
-      # Only stash an artifact if reprepro actually generated data
       - name: Upload Combination Artifact
         if: steps.check-dir.outputs.exists == 'true'
         uses: actions/upload-artifact@v4
@@ -63,7 +66,6 @@ jobs:
       - name: Setup Final Directory Structure
         run: mkdir combined_repo
 
-      # Downloads whatever combinations successfully completed
       - name: Merge All Matrix Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -71,19 +73,50 @@ jobs:
           path: combined_repo
           merge-multiple: true
 
-      # Fallback to prevent deployment crashes if the entire repository is empty
       - name: Verify repository content exists
         run: |
           if [ ! -d "combined_repo/dists" ]; then
-            echo "No distributions were processed. Creating placeholder structure."
             mkdir -p combined_repo/dists
           fi
 
-      - name: Generate Directory Indexes
+      # Automatically structures and links the beautiful web layout pages
+      - name: Auto-Generate Beautiful Directory Indexes
         run: |
-          sudo apt-get update && sudo apt-get install -y python3-pip
-          pip3 install apindex
-          apindex combined_repo
+          cp index-template.html /tmp/template.html
+          cd combined_repo
+          
+          find . -type d | while read -r dir; do
+            DISPLAY_PATH=$(echo "$dir" | sed 's|^\.||')
+            [ -z "$DISPLAY_PATH" ] && DISPLAY_PATH="/"
+            
+            sed '/<!-- APINDEX INSERTION POINT -->/q' /tmp/template.html | sed "s|%PATH%|$DISPLAY_PATH|g" > "$dir/index.html"
+            echo "<ul>" >> "$dir/index.html"
+            
+            if [ "$dir" != "." ]; then
+              echo '<li><a href="../">? .. (Parent Directory)</a></li>' >> "$dir/index.html"
+            fi
+            
+            for item in "$dir"/*; do
+              [ "$(basename "$item")" = "index.html" ] && continue
+              [ ! -e "$item" ] && continue
+              NAME=$(basename "$item")
+              
+              if [ -d "$item" ]; then
+                echo "<li><a href=\"$NAME/\">? $NAME/</a></li>" >> "$dir/index.html"
+              else
+                ICON="?"
+                [[ "$NAME" == *.deb ]] && ICON="?"
+                [[ "$NAME" == *.gz || "$NAME" == *.xz ]] && ICON="??"
+                echo "<li><a href=\"$NAME\">$ICON $NAME</a></li>" >> "$dir/index.html"
+              fi
+            done
+            
+            echo "</ul>" >> "$dir/index.html"
+            sed -n '/<!-- APINDEX INSERTION POINT -->/,$p' /tmp/template.html | tail -n +2 >> "$dir/index.html"
+          done
+
+      - name: Purge Template Tracking Target
+        run: rm -f combined_repo/index-template.html
 
       - name: Upload Finished Pages Artifact
         uses: actions/upload-pages-artifact@v3
