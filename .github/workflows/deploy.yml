@@ -1,4 +1,4 @@
-name: Deploy APT Repo
+name: Deploy Cross-Component APT Repo
 
 on:
   push:
@@ -11,33 +11,85 @@ permissions:
   id-token: write
 
 jobs:
-  build-and-deploy:
+  build-matrix:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # Prevents one empty folder from killing other working runs
+      matrix:
+        codename: ["zena", "suki"]
+        component: ["main", "testing"]
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup APT Repository via Reprepro
-        uses: morph027/apt-repo-action@v3
-        id: create-apt-repo
-        with:
-          # Explicit naming resolves the "invalid package name" error
-          repo-name: "myaxel"
-          
-          # Pass your GPG private key and passphrase from repository secrets
-          signing-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          signing-key-passphrase: ${{ secrets.GPG_PASSPHRASE }} # Leave empty if your key has no passphrase
-          
-          # Optional customization values
-          codename: "zena"
-          components: "main"
-          architectures: "amd64,arm64"
+      # --- CONDITIONAL FOLDER CHECK ---
+      # This determines if there are actually files to process for this track
+      - name: Check if channel directory exists
+        id: check-dir
+        run: |
+          TARGET_PATH="${{ github.workspace }}/${{ matrix.codename }}/${{ matrix.component }}"
+          if [ -d "$TARGET_PATH" ] && [ "$(ls -A "$TARGET_PATH")" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Directory $TARGET_PATH is empty or missing. Skipping build step."
+          fi
 
-      - name: Upload Pages Artifact
+      - name: Setup APT Repository via Reprepro
+        if: steps.check-dir.outputs.exists == 'true'
+        id: create-apt-repo
+        uses: morph027/apt-repo-action@v3
+        with:
+          repo-name: "myarepo"
+          signing-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          signing-key-passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          codename: ${{ matrix.codename }}
+          components: ${{ matrix.component }}
+          architectures: "amd64,arm64"
+          scan-dir: "${{ github.workspace }}/${{ matrix.codename }}/${{ matrix.component }}"
+
+      # Only stash an artifact if reprepro actually generated data
+      - name: Upload Combination Artifact
+        if: steps.check-dir.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-${{ matrix.codename }}-${{ matrix.component }}
+          path: ${{ steps.create-apt-repo.outputs.dir }}
+
+  deploy-combined-pages:
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Final Directory Structure
+        run: mkdir combined_repo
+
+      # Downloads whatever combinations successfully completed
+      - name: Merge All Matrix Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: repo-*
+          path: combined_repo
+          merge-multiple: true
+
+      # Fallback to prevent deployment crashes if the entire repository is empty
+      - name: Verify repository content exists
+        run: |
+          if [ ! -d "combined_repo/dists" ]; then
+            echo "No distributions were processed. Creating placeholder structure."
+            mkdir -p combined_repo/dists
+          fi
+
+      - name: Generate Directory Indexes
+        run: |
+          sudo apt-get update && sudo apt-get install -y python3-pip
+          pip3 install apindex
+          apindex combined_repo
+
+      - name: Upload Finished Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           name: github-pages
-          path: ${{ steps.create-apt-repo.outputs.dir }}
+          path: combined_repo
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
