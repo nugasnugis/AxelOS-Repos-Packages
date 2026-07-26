@@ -1,6 +1,5 @@
 name: Deploy Cross-Component APT Repo
 
-# Triggers the runner instantly whenever a .deb file is pushed to main
 on:
   push:
     branches:
@@ -26,7 +25,6 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # Auto-detects if a file exists in the active matrix channel path
       - name: Check if channel directory contains deb files
         id: check-dir
         run: |
@@ -63,6 +61,10 @@ jobs:
     needs: build-matrix
     runs-on: ubuntu-latest
     steps:
+      # --- FIX: THIS NEW STEP ALLOWS THE JOB TO SEE INDEX-TEMPLATE.HTML ---
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
       - name: Setup Final Directory Structure
         run: mkdir combined_repo
 
@@ -79,7 +81,6 @@ jobs:
             mkdir -p combined_repo/dists
           fi
 
-      # Automatically structures and links the beautiful web layout pages
       - name: Auto-Generate Beautiful Directory Indexes
         run: |
           cp index-template.html /tmp/template.html
