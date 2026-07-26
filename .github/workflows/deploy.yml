@@ -90,11 +90,16 @@ jobs:
             DISPLAY_PATH=$(echo "$dir" | sed 's|^\.||')
             [ -z "$DISPLAY_PATH" ] && DISPLAY_PATH="/"
             
+            SECTION="component segment"
+            [[ "$DISPLAY_PATH" == *"/pool/"* ]] && SECTION="binary pool"
+            [[ "$DISPLAY_PATH" == *"/dists/"* ]] && SECTION="release tracking"
+
+            # Parse template sections up to insertion token anchor hook
             sed '/<!-- APINDEX INSERTION POINT -->/q' /tmp/template.html | sed "s|%PATH%|$DISPLAY_PATH|g" > "$dir/index.html"
-            echo "<ul>" >> "$dir/index.html"
             
+            # Parent navigation indicator
             if [ "$dir" != "." ]; then
-              echo '<li><a href="../">? .. (Parent Directory)</a></li>' >> "$dir/index.html"
+              echo '<tr class="hover:bg-blue-50/30 transition-colors"><td class="px-6 py-4"><a class="text-[#1a8cd8] font-bold hover:underline" href="../"><i class="fa-solid fa-arrow-turn-up text-slate-400 mr-2"></i> .. (Parent Directory)</a></td><td class="px-6 py-4 text-xs text-slate-400 font-mono">system</td><td class="px-6 py-4 text-right font-bold text-slate-300">-</td></tr>' >> "$dir/index.html"
             fi
             
             for item in "$dir"/*; do
@@ -103,18 +108,21 @@ jobs:
               NAME=$(basename "$item")
               
               if [ -d "$item" ]; then
-                echo "<li><a href=\"$NAME/\">? $NAME/</a></li>" >> "$dir/index.html"
+                echo "<tr class=\"hover:bg-blue-50/30 transition-colors\"><td class=\"px-6 py-4\"><a class=\"text-slate-700 font-bold hover:text-[#1a8cd8] transition-colors\" href=\"$NAME/\"><i class=\"fa-solid fa-folder text-[#1a8cd8] mr-2\"></i> $NAME/</a></td><td class=\"px-6 py-4 text-xs text-slate-400 font-mono\">$SECTION</td><td class=\"px-6 py-4 text-right\"><a class=\"text-[#1a8cd8] font-bold hover:underline text-xs\" href=\"$NAME/\">[browse]</a></td></tr>" >> "$dir/index.html"
               else
-                ICON="?"
-                [[ "$NAME" == *.deb ]] && ICON="?"
-                [[ "$NAME" == *.gz || "$NAME" == *.xz ]] && ICON="??"
-                echo "<li><a href=\"$NAME\">$ICON $NAME</a></li>" >> "$dir/index.html"
+                ICON="fa-regular fa-file-code text-slate-400"
+                LABEL="[file]"
+                [[ "$NAME" == *.deb ]] && ICON="fa-solid fa-box text-blue-500" && LABEL="[deb]"
+                [[ "$NAME" == *.gz || "$NAME" == *.xz || "$NAME" == *Release* ]] && ICON="fa-solid fa-file-zipper text-purple-500" && LABEL="[src]"
+                
+                echo "<tr class=\"hover:bg-blue-50/30 transition-colors\"><td class=\"px-6 py-4\"><span class=\"text-slate-600 font-medium flex items-center\"><i class=\"$ICON mr-2\"></i> $NAME</span></td><td class=\"px-6 py-4 text-xs text-slate-400 font-mono\">$SECTION</td><td class=\"px-6 py-4 text-right\"><a class=\"text-[#1a8cd8] font-bold hover:underline text-xs font-mono\" href=\"$NAME\">$LABEL</a></td></tr>" >> "$dir/index.html"
               fi
             done
             
-            echo "</ul>" >> "$dir/index.html"
+            # Combine footer template segments
             sed -n '/<!-- APINDEX INSERTION POINT -->/,$p' /tmp/template.html | tail -n +2 >> "$dir/index.html"
           done
+
 
       - name: Purge Template Tracking Target
         run: rm -f combined_repo/index-template.html
