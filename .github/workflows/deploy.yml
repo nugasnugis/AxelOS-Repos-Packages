@@ -1,12 +1,11 @@
-name: Deploy Cross-Component APT Repo
+name: Generate Debian APT Repository
 
 on:
   push:
     branches:
       - main
     paths:
-      - '**/*.deb'
-      - '.github/workflows/deploy.yml'
+      - 'incoming/**'
 
 permissions:
   contents: write
@@ -14,124 +13,66 @@ permissions:
   id-token: write
 
 jobs:
-  build-matrix:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        codename: ["zena", "suki"]
-        component: ["main", "testing"]
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
-
-      - name: Check if channel directory contains deb files
-        id: check-dir
-        run: |
-          TARGET_PATH="${{ github.workspace }}/${{ matrix.codename }}/${{ matrix.component }}"
-          if [ -d "$TARGET_PATH" ] && ls "$TARGET_PATH"/*.deb 1> /dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Found packages to process in $TARGET_PATH"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "No packages found in $TARGET_PATH. Skipping."
-          fi
-
-      - name: Setup APT Repository via Reprepro
-        if: steps.check-dir.outputs.exists == 'true'
-        id: create-apt-repo
-        uses: morph027/apt-repo-action@v3
-        with:
-          repo-name: "myrepo"
-          signing-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          signing-key-passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          codename: ${{ matrix.codename }}
-          components: ${{ matrix.component }}
-          architectures: "amd64,arm64"
-          scan-dir: "${{ github.workspace }}/${{ matrix.codename }}/${{ matrix.component }}"
-
-      - name: Upload Combination Artifact
-        if: steps.check-dir.outputs.exists == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: repo-${{ matrix.codename }}-${{ matrix.component }}
-          path: ${{ steps.create-apt-repo.outputs.dir }}
-
-  deploy-combined-pages:
-    needs: build-matrix
+  build-repo:
     runs-on: ubuntu-latest
     steps:
-      # --- FIX: THIS NEW STEP ALLOWS THE JOB TO SEE INDEX-TEMPLATE.HTML ---
-      - name: Checkout Source Code
+      - name: Checkout Repository Code
         uses: actions/checkout@v4
 
-      - name: Setup Final Directory Structure
-        run: mkdir combined_repo
+      - name: Install Reprepro Engine
+        run: |
+          sudo apt-get update
+          sudo apt-get install reprepro devscripts -y
 
-      - name: Merge All Matrix Artifacts
-        uses: actions/download-artifact@v4
+      - name: Import GPG Key
+        uses: crazy-max/ghaction-import-gpg@v6
+        id: import-gpg
         with:
-          pattern: repo-*
-          path: combined_repo
-          merge-multiple: true
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
-      - name: Verify repository content exists
+      - name: Configure Reprepro Multi-Codename Index
         run: |
-          if [ ! -d "combined_repo/dists" ]; then
-            mkdir -p combined_repo/dists
+          mkdir -p conf
+          cat << 'EOF' > conf/distributions
+          Origin: AxelOS
+          Label: AxelOS Official Update Mirror
+          Codename: zena
+          Architectures: amd64 i386 arm64 source
+          Components: main
+          Description: APT repository for AxelOS Custom Builds (Stable)
+          SignWith: ${{ steps.import-gpg.outputs.keyid }}
+
+          Origin: AxelOS
+          Label: AxelOS Testing Update Mirror
+          Codename: forky
+          Architectures: amd64 i386 arm64 source
+          Components: main
+          Description: APT repository for AxelOS Custom Builds (Testing)
+          SignWith: ${{ steps.import-gpg.outputs.keyid }}
+          EOF
+
+      - name: Process Incoming Packages Automatically
+        run: |
+          # Process any files dropped into an incoming/zena/ folder
+          if [ -d "incoming/zena" ]; then
+            find incoming/zena/ -name "*.deb" -exec reprepro -V includedeb zena {} \;
           fi
-
-      - name: Auto-Generate Beautiful Directory Indexes
-        run: |
-          cp index-template.html /tmp/template.html
-          cd combined_repo
           
-          find . -type d | while read -r dir; do
-            DISPLAY_PATH=$(echo "$dir" | sed 's|^\.||')
-            [ -z "$DISPLAY_PATH" ] && DISPLAY_PATH="/"
-            
-            SECTION="component segment"
-            [[ "$DISPLAY_PATH" == *"/pool/"* ]] && SECTION="binary pool"
-            [[ "$DISPLAY_PATH" == *"/dists/"* ]] && SECTION="release tracking"
+          # Process any files dropped into an incoming/forky/ folder
+          if [ -d "incoming/forky" ]; then
+            find incoming/forky/ -name "*.deb" -exec reprepro -V includedeb forky {} \;
+          fi
+          
+          # Export public security validation certificate
+          gpg --armor --export ${{ steps.import-gpg.outputs.keyid }} > public.key
+          
+          # Clean out processed setup tracks to keep repo light
+          rm -rf incoming/
 
-            # Parse template sections up to insertion token anchor hook
-            sed '/<!-- APINDEX INSERTION POINT -->/q' /tmp/template.html | sed "s|%PATH%|$DISPLAY_PATH|g" > "$dir/index.html"
-            
-            # Parent navigation indicator
-            if [ "$dir" != "." ]; then
-              echo '<tr class="hover:bg-blue-50/30 transition-colors"><td class="px-6 py-4"><a class="text-[#1a8cd8] font-bold hover:underline" href="../"><i class="fa-solid fa-arrow-turn-up text-slate-400 mr-2"></i> .. (Parent Directory)</a></td><td class="px-6 py-4 text-xs text-slate-400 font-mono">system</td><td class="px-6 py-4 text-right font-bold text-slate-300">-</td></tr>' >> "$dir/index.html"
-            fi
-            
-            for item in "$dir"/*; do
-              [ "$(basename "$item")" = "index.html" ] && continue
-              [ ! -e "$item" ] && continue
-              NAME=$(basename "$item")
-              
-              if [ -d "$item" ]; then
-                echo "<tr class=\"hover:bg-blue-50/30 transition-colors\"><td class=\"px-6 py-4\"><a class=\"text-slate-700 font-bold hover:text-[#1a8cd8] transition-colors\" href=\"$NAME/\"><i class=\"fa-solid fa-folder text-[#1a8cd8] mr-2\"></i> $NAME/</a></td><td class=\"px-6 py-4 text-xs text-slate-400 font-mono\">$SECTION</td><td class=\"px-6 py-4 text-right\"><a class=\"text-[#1a8cd8] font-bold hover:underline text-xs\" href=\"$NAME/\">[browse]</a></td></tr>" >> "$dir/index.html"
-              else
-                ICON="fa-regular fa-file-code text-slate-400"
-                LABEL="[file]"
-                [[ "$NAME" == *.deb ]] && ICON="fa-solid fa-box text-blue-500" && LABEL="[deb]"
-                [[ "$NAME" == *.gz || "$NAME" == *.xz || "$NAME" == *Release* ]] && ICON="fa-solid fa-file-zipper text-purple-500" && LABEL="[src]"
-                
-                echo "<tr class=\"hover:bg-blue-50/30 transition-colors\"><td class=\"px-6 py-4\"><span class=\"text-slate-600 font-medium flex items-center\"><i class=\"$ICON mr-2\"></i> $NAME</span></td><td class=\"px-6 py-4 text-xs text-slate-400 font-mono\">$SECTION</td><td class=\"px-6 py-4 text-right\"><a class=\"text-[#1a8cd8] font-bold hover:underline text-xs font-mono\" href=\"$NAME\">$LABEL</a></td></tr>" >> "$dir/index.html"
-              fi
-            done
-            
-            # Combine footer template segments
-            sed -n '/<!-- APINDEX INSERTION POINT -->/,$p' /tmp/template.html | tail -n +2 >> "$dir/index.html"
-          done
-
-
-      - name: Purge Template Tracking Target
-        run: rm -f combined_repo/index-template.html
-
-      - name: Upload Finished Pages Artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy Compiled Layout to GitHub Pages Branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          name: github-pages
-          path: combined_repo
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          publish_branch: gh-pages
