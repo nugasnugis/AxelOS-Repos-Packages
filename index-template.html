@@ -3,46 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APT Repository Browser</title>
+    <title>AxelOS Package Repositories</title>
+    <!-- Tailwind CSS Integration -->
+    <script src="https://tailwindcss.com"></script>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="https://cloudflare.com">
     <style>
-        :root { --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --text-muted: #94a3b8; --accent: #38bdf8; --border: #334155; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); max-width: 900px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
-        h1 { font-size: 2rem; font-weight: 700; color: var(--accent); margin-bottom: 5px; }
-        .subtitle { color: var(--text-muted); margin-bottom: 25px; }
-        .instructions { background: var(--panel); border-left: 4px solid var(--accent); padding: 20px; border-radius: 8px; margin-bottom: 30px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        .instructions h3 { margin-top: 0; color: var(--accent); }
-        pre { background: #020617; padding: 15px; border-radius: 6px; overflow-x: auto; border: 1px solid var(--border); color: #e2e8f0; font-family: monospace; }
-        .dir-list { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-        .dir-header { background: #111827; padding: 12px 20px; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border); }
-        ul { list-style: none; padding: 0; margin: 0; }
-        li { border-bottom: 1px solid var(--border); }
-        li:last-child { border-bottom: none; }
-        a { display: block; padding: 14px 20px; color: var(--text); text-decoration: none; font-weight: 500; transition: background 0.2s ease; }
-        a:hover { background: #24334d; color: var(--accent); }
+        body { 
+            background-color: #f8fafc; 
+            font-family: 'Outfit', 'Montserrat', sans-serif; 
+            color: #1e293b;
+        }
+        .btn-primary {
+            background-color: #1a8cd8;
+            color: white;
+            transition: all 0.2s ease;
+        }
+        .btn-primary:hover {
+            background-color: #1572b6;
+            transform: translateY(-1px);
+        }
+        .custom-shadow {
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.04);
+        }
     </style>
 </head>
-<body>
+<body class="min-h-screen flex flex-col justify-between">
 
-    <h1>Custom APT Repository</h1>
-    <p class="subtitle">Secure static package mirror powered by reprepro & GitHub Pages</p>
+    <!-- AxelOS Top Navbar -->
+    <nav class="bg-white border-b border-gray-100 px-6 lg:px-24 py-4 flex justify-between items-center sticky top-0 z-50">
+        <a href="#" class="flex items-center gap-3 text-slate-900 font-bold text-xl tracking-tight">
+            <img src="/logo.png" alt="AxelOS Logo" class="w-8 h-8 object-contain" onerror="this.style.display='none';">
+            <span class="text-slate-900 font-extrabold">AxelOS</span>
+        </a>
+        <div class="flex gap-6 text-sm font-semibold text-slate-600 items-center">
+            <a href="#" class="hover:text-[#1a8cd8] transition-colors">Features</a>
+            <a href="#" class="hover:text-[#1a8cd8] transition-colors">About</a>
+            <a href="#" class="hover:text-[#1a8cd8] transition-colors">Install Guide</a>
+            <a href="#" class="text-[#1a8cd8] transition-colors">Releases & Downloads</a>
+            <a href="#" class="btn-primary text-xs px-4 py-2 rounded-lg font-bold shadow-sm">Download</a>
+        </div>
+    </nav>
 
-    <div class="instructions">
-        <h3>How to add this repository:</h3>
-        <p>Run these commands to add the secure signature keyring and update your sources list:</p>
-        <pre># 1. Download the public repo security key
-curl -sS https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/myrepo-keyring.gpg
+    <!-- Full-Width System Header (Linux Mint Explorer Title Style) -->
+    <header class="bg-gradient-to-b from-white to-slate-50 border-b border-slate-100 py-10 px-6 lg:px-24">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <span class="text-xs font-bold uppercase tracking-widest text-[#1a8cd8] bg-blue-50 px-3 py-1 rounded-full">Package Browser Engine</span>
+                <h1 class="text-3xl font-black text-slate-900 mt-2 mb-1 tracking-tight">
+                    Index of <span class="text-[#1a8cd8] font-mono font-medium font-bold">%PATH%</span>
+                </h1>
+                <p class="text-slate-500 text-sm font-medium">Official software mirror system for secure stable distribution platforms.</p>
+            </div>
+            
+            <!-- Quick Command Alert copied directly into header for accessible workspace setup -->
+            <div class="bg-slate-900 border border-slate-800 text-[11px] p-3 rounded-xl font-mono text-emerald-400 max-w-md w-full shadow-inner">
+                <span class="text-slate-500 block mb-1"># Add repository channel to your system:</span>
+                echo "deb [signed-by=...] https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ zena main"
+            </div>
+        </div>
+    </header>
 
-# 2. Add the source listing (Adjust "zena/suki" and "main/testing" variables below to fit your system setup)
-echo "deb [signed-by=/usr/share/keyrings/myrepo-keyring.gpg] https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ zena main" | sudo tee /etc/apt/sources.list.d/myrepo.list
+    <!-- Full Width Mint-Style Package Matrix Table -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-6 lg:px-24 py-10">
+        
+        <div class="bg-white border border-slate-200/80 rounded-2xl overflow-hidden custom-shadow flex flex-col">
+            <!-- Directory Status Bar -->
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                <span class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-folder-tree text-[#1a8cd8]"></i> Mirror Archives List
+                </span>
+                <span class="text-[10px] uppercase font-bold tracking-wider bg-blue-50 text-[#1a8cd8] px-2.5 py-1 rounded-md font-mono">reprepro static path</span>
+            </div>
+            
+            <!-- Dynamic File Rows Engine Target Container -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50/50 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                            <th class="px-6 py-3.5 w-7/12">Package Name / Component File</th>
+                            <th class="px-6 py-3.5 w-3/12">Section Classification</th>
+                            <th class="px-6 py-3.5 w-2/12 text-right">Fetch Asset</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 font-medium text-sm text-slate-700">
+                        <!-- APINDEX INSERTION POINT -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-# 3. Synchronize package updates
-sudo apt update</pre>
-    </div>
+        <!-- Inline Repository Trust Guide Panel sitting under the file index table -->
+        <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white border border-slate-200/80 rounded-2xl p-5 custom-shadow">
+                <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">1. Register Signing Security Key</h4>
+                <pre class="bg-slate-900 text-slate-300 font-mono text-xs p-3 rounded-xl overflow-x-auto">curl -sS https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/axel-keyring.gpg</pre>
+            </div>
+            <div class="bg-white border border-slate-200/80 rounded-2xl p-5 custom-shadow">
+                <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">2. Update Core Packages System</h4>
+                <pre class="bg-slate-900 text-slate-300 font-mono text-xs p-3 rounded-xl overflow-x-auto">sudo apt update && sudo apt install &lt;package-name&gt;</pre>
+            </div>
+        </div>
 
-    <div class="dir-list">
-        <div class="dir-header">Index of %PATH%</div>
-        <!-- APINDEX INSERTION POINT -->
-    </div>
+    </main>
+
+    <!-- AxelOS Dark Footer Layout Block -->
+    <footer class="border-t border-slate-200 bg-slate-900 text-slate-400 px-6 lg:px-24 py-8 mt-16 text-sm">
+        <div class="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
+            <div>
+                <p class="font-bold text-white text-base">AxelOS Project</p>
+                <p class="text-xs text-slate-500 mt-1">Independent system repository mirror engine deployment networks.</p>
+            </div>
+            <div class="flex gap-6 text-xs font-semibold">
+                <a href="#" class="hover:text-white transition-colors">Discord</a>
+                <a href="#" class="hover:text-white transition-colors">YouTube</a>
+                <a href="#" class="hover:text-white transition-colors">GitHub</a>
+            </div>
+        </div>
+    </footer>
 
 </body>
 </html>
