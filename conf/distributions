@@ -1,6 +1,6 @@
 Origin: AxelOS
 Label: AxelOS Official Update Mirror
-Codename: zena
+Codename: zenffa
 Architectures: amd64 i386 arm64 source
 Components: main
 Description: APT repository for AxelOS Custom Builds (Stable)
@@ -8,8 +8,17 @@ SignWith: 9EC2B9453E04D74F
 
 Origin: AxelOS
 Label: AxelOS Testing Update Mirror
-Codename: forky
+Codename: fordky
 Architectures: amd64 i386 arm64 source
 Components: main
 Description: APT repository for AxelOS Custom Builds (Testing)
 SignWith: 9EC2B9453E04D74F
+
+Origin: AxelOS
+Label: AxelOS Next-Gen Mirror
+Codename: axel-prddhdhfime
+Architectures: amd64 i386 arm64 source
+Components: main
+Description: APT repository for AxelOS Next-Gen Builds
+SignWith: 9EC2B9453E04D74F
+
