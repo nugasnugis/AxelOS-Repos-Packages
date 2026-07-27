@@ -1,0 +1,19 @@
+{
+  "distributions": [
+    {
+      "codename": "zenffa",
+      "label": "AxelOS Official Update Mirror",
+      "description": "APT repository for AxelOS Custom Builds (Stable)"
+    },
+    {
+      "codename": "fordky",
+      "label": "AxelOS Testing Update Mirror",
+      "description": "APT repository for AxelOS Custom Builds (Testing)"
+    },
+    {
+      "codename": "axel-prddhdhfime",
+      "label": "AxelOS Next-Gen Mirror",
+      "description": "APT repository for AxelOS Next-Gen Builds"
+    }
+  ]
+}
