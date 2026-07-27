@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'incoming/**'
+      - 'dist.json'
 
 permissions:
   contents: write
@@ -19,10 +20,10 @@ jobs:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
-      - name: Install Reprepro Engine
+      - name: Install Reprepro and JSON Processor
         run: |
           sudo apt-get update
-          sudo apt-get install reprepro devscripts -y
+          sudo apt-get install reprepro devscripts jq -y
 
       - name: Import GPG Key
         uses: crazy-max/ghaction-import-gpg@v6
@@ -31,43 +32,49 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
-      - name: Configure Reprepro Multi-Codename Index
+      - name: Purely Dynamic Reprepro Index Generator
         run: |
           mkdir -p conf
-          cat << 'EOF' > conf/distributions
+          rm -f conf/distributions
+          
+          # Use jq to iterate through your dist.json and output a compliant reprepro structure
+          jq -c '.distributions[]' dist.json | while read -r item; do
+            CODENAME=$(echo "$item" | jq -r '.codename')
+            LABEL=$(echo "$item" | jq -r '.label')
+            DESC=$(echo "$item" | jq -r '.description')
+            
+            cat << EOF >> conf/distributions
           Origin: AxelOS
-          Label: AxelOS Official Update Mirror
-          Codename: zena
+          Label: $LABEL
+          Codename: $CODENAME
           Architectures: amd64 i386 arm64 source
           Components: main
-          Description: APT repository for AxelOS Custom Builds (Stable)
+          Description: $DESC
           SignWith: ${{ steps.import-gpg.outputs.keyid }}
 
-          Origin: AxelOS
-          Label: AxelOS Testing Update Mirror
-          Codename: forky
-          Architectures: amd64 i386 arm64 source
-          Components: main
-          Description: APT repository for AxelOS Custom Builds (Testing)
-          SignWith: ${{ steps.import-gpg.outputs.keyid }}
           EOF
+          done
 
-      - name: Process Incoming Packages Automatically
+      - name: Purely Dynamic Incoming Scanner Engine
         run: |
-          # Process any files dropped into an incoming/zena/ folder
-          if [ -d "incoming/zena" ]; then
-            find incoming/zena/ -name "*.deb" -exec reprepro -V includedeb zena {} \;
-          fi
+          # Dynamically parse the json configuration to identify what directories to scan
+          CODENAMES=$(jq -r '.distributions[].codename' dist.json)
           
-          # Process any files dropped into an incoming/forky/ folder
-          if [ -d "incoming/forky" ]; then
-            find incoming/forky/ -name "*.deb" -exec reprepro -V includedeb forky {} \;
-          fi
+          for CODE in $CODENAMES; do
+            echo "[*] Scanning for incoming packages for codename: $CODE"
+            
+            # Match folder variations using a case-insensitive search engine loop
+            find incoming/ -iname "$CODE" -type d | while read -r dir; do
+              if [ -d "$dir" ] && [ "$(find "$dir" -name "*.deb" | wc -l)" -gt 0 ]; then
+                echo "    -> Processing payload found inside $dir into distribution $CODE..."
+                find "$dir" -name "*.deb" -exec reprepro -V includedeb "$CODE" {} \;
+              fi
+            done
+          done
           
-          # Export public security validation certificate
+          # Cleanup old abandoned versions and sign public cryptographic blocks
+          reprepro clearvanished
           gpg --armor --export ${{ steps.import-gpg.outputs.keyid }} > public.key
-          
-          # Clean out processed setup tracks to keep repo light
           rm -rf incoming/
 
       - name: Deploy Compiled Layout to GitHub Pages Branch
